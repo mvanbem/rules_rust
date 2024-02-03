@@ -565,8 +565,8 @@ def _rust_toolchain_impl(ctx):
             ctx.label,
         ))
 
-    if ctx.attr.target_triple and ctx.attr.target_json:
-        fail("Do not specify both target_triple and target_json, either use a builtin triple or provide a custom specification file. Please update {}".format(
+    if not ctx.attr.target_triple and not ctx.attr.target_json:
+        fail("At least one of `target_triple` and `target_json` must be provided. Please update {}".format(
             ctx.label,
         ))
 
@@ -580,24 +580,28 @@ def _rust_toolchain_impl(ctx):
         target_arch = target_triple.arch
         target_os = target_triple.system
 
-    elif ctx.attr.target_json:
+    if ctx.attr.target_json:
         # Ensure the data provided is valid json
         target_json_content = json.decode(ctx.attr.target_json)
-        target_json = ctx.actions.declare_file("{}.target.json".format(ctx.label.name))
+        if ctx.attr.target_triple:
+            target_json_path = "{}.json".format(ctx.attr.target_triple)
+        elif "llvm-target" in target_json_content:
+            target_json_path = "{}.json".format(target_json_content["llvm-target"])
+        else:
+            target_json_path = "{}.target.json".format(ctx.label.name)
+        target_json = ctx.actions.declare_file(target_json_path)
 
         ctx.actions.write(
             output = target_json,
             content = json.encode_indent(target_json_content, indent = " " * 4),
         )
 
+        if "llvm-target" in target_json_content:
+            target_triple = target_triple or triple(target_json_content["llvm-target"])
         if "arch" in target_json_content:
-            target_arch = target_json_content["arch"]
+            target_arch = target_arch or target_json_content["arch"]
         if "os" in target_json_content:
-            target_os = target_json_content["os"]
-    else:
-        fail("Either `target_triple` or `target_json` must be provided. Please update {}".format(
-            ctx.label,
-        ))
+            target_os = target_os or target_json_content["os"]
 
     toolchain = platform_common.ToolchainInfo(
         all_files = sysroot.all_files,
@@ -779,8 +783,14 @@ rust_toolchain = rule(
             mandatory = True,
         ),
         "target_json": attr.string(
-            doc = ("Override the target_triple with a custom target specification. " +
-                   "For more details see: https://doc.rust-lang.org/rustc/targets/custom.html"),
+            doc = ("Override the `target_triple` with a custom target specification. " +
+                   "For more details see: https://doc.rust-lang.org/rustc/targets/custom.html" +
+                   "\n" +
+                   "If `target_triple` is absent, it falls back to the specification's `llvm-target` value. " +
+                   "The custom target specification file is named with the first available of: " +
+                   "(1) the provided `target_triple` attribute, " +
+                   "(2) the specification's `llvm-target` value, " +
+                   "(3) this target's `name`."),
         ),
         "target_triple": attr.string(
             doc = (
