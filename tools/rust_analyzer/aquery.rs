@@ -75,7 +75,8 @@ pub fn get_crate_specs(
         .collect::<Vec<_>>()
         .join("+");
 
-    let aquery_output = Command::new(bazel)
+    let mut command = Command::new(bazel);
+    command
         .current_dir(workspace)
         .arg("aquery")
         .arg("--include_aspects")
@@ -87,8 +88,15 @@ pub fn get_crate_specs(
         .arg(format!(
             r#"outputs(".*[.]rust_analyzer_crate_spec",{target_pattern})"#
         ))
-        .arg("--output=jsonproto")
-        .output()?;
+        .arg("--output=jsonproto");
+    log::debug!("Command: {command:?}");
+    let aquery_output = command.output()?;
+    if log::log_enabled!(log::Level::Debug) {
+        let stdout = String::from_utf8_lossy(&aquery_output.stdout);
+        let stderr = String::from_utf8_lossy(&aquery_output.stderr);
+        log::debug!("Command stdout:\n{stdout}");
+        log::debug!("Command stderr:\n{stderr}");
+    }
 
     let crate_spec_files =
         parse_aquery_output_files(execution_root, &String::from_utf8(aquery_output.stdout)?)?;
