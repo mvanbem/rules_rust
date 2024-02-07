@@ -44,6 +44,7 @@ pub fn write_rust_project(
     bazel: impl AsRef<Path>,
     workspace: impl AsRef<Path>,
     rules_rust_name: &impl AsRef<str>,
+    additional_bazel_flags: &[String],
     targets: &[String],
     execution_root: impl AsRef<Path>,
     output_base: impl AsRef<Path>,
@@ -53,6 +54,7 @@ pub fn write_rust_project(
         bazel.as_ref(),
         workspace.as_ref(),
         execution_root.as_ref(),
+        additional_bazel_flags,
         targets,
         rules_rust_name.as_ref(),
     )?;

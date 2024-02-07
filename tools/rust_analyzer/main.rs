@@ -46,6 +46,7 @@ fn main() -> anyhow::Result<()> {
         &config.bazel,
         workspace_root,
         &rules_rust_name,
+        &config.bazel_aquery_flags,
         &config.targets,
         execution_root,
         output_base,
@@ -107,6 +108,9 @@ struct Config {
     /// The path to the Bazel workspace directory. If not specified, uses the result of `bazel info workspace`.
     #[clap(long, env = "BUILD_WORKSPACE_DIRECTORY")]
     workspace: Option<PathBuf>,
+
+    #[clap(long, env = "BAZEL_AQUERY_FLAGS")]
+    bazel_aquery_flags: Vec<String>,
 
     /// The path to the Bazel execution root. If not specified, uses the result of `bazel info execution_root`.
     #[clap(long)]
