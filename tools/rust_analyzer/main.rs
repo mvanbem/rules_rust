@@ -38,6 +38,7 @@ fn main() -> anyhow::Result<()> {
         &config.bazel,
         workspace_root,
         rules_rust_name,
+        &config.bazel_flags,
         &config.targets,
     )?;
 
@@ -46,6 +47,7 @@ fn main() -> anyhow::Result<()> {
         &config.bazel,
         workspace_root,
         &rules_rust_name,
+        &config.bazel_flags,
         &config.targets,
         execution_root,
         output_base,
@@ -65,7 +67,7 @@ fn parse_config() -> anyhow::Result<Config> {
 
     // We need some info from `bazel info`. Fetch it now.
     let mut bazel_info_command = Command::new(&config.bazel);
-    bazel_info_command.arg("info");
+    bazel_info_command.arg("info").args(&config.bazel_flags);
     if let Some(workspace) = &config.workspace {
         bazel_info_command.current_dir(workspace);
     }
@@ -107,6 +109,9 @@ struct Config {
     /// The path to the Bazel workspace directory. If not specified, uses the result of `bazel info workspace`.
     #[clap(long, env = "BUILD_WORKSPACE_DIRECTORY")]
     workspace: Option<PathBuf>,
+
+    #[clap(long, env = "BAZEL_FLAGS")]
+    bazel_flags: Vec<String>,
 
     /// The path to the Bazel execution root. If not specified, uses the result of `bazel info execution_root`.
     #[clap(long)]
