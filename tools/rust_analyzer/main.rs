@@ -38,6 +38,7 @@ fn main() -> anyhow::Result<()> {
         &config.bazel,
         workspace_root,
         rules_rust_name,
+        &config.bazel_flags,
         &config.targets,
     )?;
 
@@ -46,6 +47,7 @@ fn main() -> anyhow::Result<()> {
         &config.bazel,
         workspace_root,
         &rules_rust_name,
+        &config.bazel_flags,
         &config.targets,
         execution_root,
         output_base,
@@ -69,7 +71,8 @@ fn parse_config() -> anyhow::Result<Config> {
         .env_remove("BAZELISK_SKIP_WRAPPER")
         .env_remove("BUILD_WORKING_DIRECTORY")
         .env_remove("BUILD_WORKSPACE_DIRECTORY")
-        .arg("info");
+        .arg("info")
+        .args(&config.bazel_flags);
     if let Some(workspace) = &config.workspace {
         bazel_info_command.current_dir(workspace);
     }
@@ -111,6 +114,9 @@ struct Config {
     /// The path to the Bazel workspace directory. If not specified, uses the result of `bazel info workspace`.
     #[clap(long, env = "BUILD_WORKSPACE_DIRECTORY")]
     workspace: Option<PathBuf>,
+
+    #[clap(long, env = "BAZEL_FLAGS")]
+    bazel_flags: Vec<String>,
 
     /// The path to the Bazel execution root. If not specified, uses the result of `bazel info execution_root`.
     #[clap(long)]

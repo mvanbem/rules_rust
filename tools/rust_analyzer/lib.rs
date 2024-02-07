@@ -14,6 +14,7 @@ pub fn generate_crate_info(
     bazel: impl AsRef<Path>,
     workspace: impl AsRef<Path>,
     rules_rust: impl AsRef<str>,
+    additional_bazel_flags: &[String],
     targets: &[String],
 ) -> anyhow::Result<()> {
     log::debug!("Building rust_analyzer_crate_spec files for {:?}", targets);
@@ -30,6 +31,7 @@ pub fn generate_crate_info(
             rules_rust.as_ref()
         ))
         .arg("--output_groups=rust_analyzer_crate_spec")
+        .args(additional_bazel_flags)
         .args(targets)
         .output()?;
 
@@ -48,6 +50,7 @@ pub fn write_rust_project(
     bazel: impl AsRef<Path>,
     workspace: impl AsRef<Path>,
     rules_rust_name: &impl AsRef<str>,
+    additional_bazel_flags: &[String],
     targets: &[String],
     execution_root: impl AsRef<Path>,
     output_base: impl AsRef<Path>,
@@ -57,6 +60,7 @@ pub fn write_rust_project(
         bazel.as_ref(),
         workspace.as_ref(),
         execution_root.as_ref(),
+        additional_bazel_flags,
         targets,
         rules_rust_name.as_ref(),
     )?;

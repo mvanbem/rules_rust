@@ -64,6 +64,7 @@ pub fn get_crate_specs(
     bazel: &Path,
     workspace: &Path,
     execution_root: &Path,
+    additional_bazel_flags: &[String],
     targets: &[String],
     rules_rust_name: &str,
 ) -> anyhow::Result<BTreeSet<CrateSpec>> {
@@ -90,6 +91,7 @@ pub fn get_crate_specs(
             r#"outputs(".*\.rust_analyzer_crate_spec\.json",{target_pattern})"#
         ))
         .arg("--output=jsonproto")
+        .args(additional_bazel_flags)
         .output()?;
 
     let crate_spec_files =
