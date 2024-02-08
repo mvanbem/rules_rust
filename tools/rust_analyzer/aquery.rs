@@ -1,40 +1,30 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::File;
 use std::option::Option;
 use std::path::Path;
-use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::Context;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct AqueryOutput {
-    artifacts: Vec<Artifact>,
     actions: Vec<Action>,
-    #[serde(rename = "pathFragments")]
-    path_fragments: Vec<PathFragment>,
+    targets: Vec<Target>,
 }
 
 #[derive(Debug, Deserialize)]
-struct Artifact {
-    id: u32,
-    #[serde(rename = "pathFragmentId")]
-    path_fragment_id: u32,
+#[serde(rename_all = "camelCase")]
+struct Action {
+    target_id: u32,
+    file_contents: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct PathFragment {
+#[serde(rename_all = "camelCase")]
+struct Target {
     id: u32,
     label: String,
-    #[serde(rename = "parentId")]
-    parent_id: Option<u32>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Action {
-    #[serde(rename = "outputIds")]
-    output_ids: Vec<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
@@ -64,7 +54,6 @@ pub struct CrateSpecSource {
 pub fn get_crate_specs(
     bazel: &Path,
     workspace: &Path,
-    execution_root: &Path,
     additional_bazel_flags: &[String],
     targets: &[String],
     rules_rust_name: &str,
@@ -79,8 +68,10 @@ pub fn get_crate_specs(
     let aquery_output = Command::new(bazel)
         .current_dir(workspace)
         .arg("aquery")
+        .arg("--noinclude_commandline")
+        .arg("--noinclude_artifacts")
         .arg("--include_aspects")
-        .arg("--include_artifacts")
+        .arg("--include_file_write_contents")
         .arg(format!(
             "--aspects={rules_rust_name}//rust:defs.bzl%rust_analyzer_aspect"
         ))
@@ -92,26 +83,12 @@ pub fn get_crate_specs(
         .args(additional_bazel_flags)
         .output()?;
 
-    let crate_spec_files =
-        parse_aquery_output_files(execution_root, &String::from_utf8(aquery_output.stdout)?)?;
-
-    let crate_specs = crate_spec_files
-        .into_iter()
-        .map(|file| {
-            let f = File::open(&file)
-                .with_context(|| format!("Failed to open file: {}", file.display()))?;
-            serde_json::from_reader(f)
-                .with_context(|| format!("Failed to deserialize file: {}", file.display()))
-        })
-        .collect::<anyhow::Result<Vec<CrateSpec>>>()?;
-
-    consolidate_crate_specs(crate_specs)
+    consolidate_crate_specs(parse_aquery_output(&String::from_utf8(
+        aquery_output.stdout,
+    )?)?)
 }
 
-fn parse_aquery_output_files(
-    execution_root: &Path,
-    aquery_stdout: &str,
-) -> anyhow::Result<Vec<PathBuf>> {
+fn parse_aquery_output(aquery_stdout: &str) -> anyhow::Result<Vec<CrateSpec>> {
     let out: AqueryOutput = serde_json::from_str(aquery_stdout).map_err(|_| {
         // Parsing to `AqueryOutput` failed, try parsing into a `serde_json::Value`:
         match serde_json::from_str::<serde_json::Value>(aquery_stdout) {
@@ -125,51 +102,28 @@ fn parse_aquery_output_files(
         }
     })?;
 
-    let artifacts = out
-        .artifacts
+    let targets = out
+        .targets
         .iter()
         .map(|a| (a.id, a))
         .collect::<BTreeMap<_, _>>();
-    let path_fragments = out
-        .path_fragments
-        .iter()
-        .map(|pf| (pf.id, pf))
-        .collect::<BTreeMap<_, _>>();
 
-    let mut output_files: Vec<PathBuf> = Vec::new();
+    let mut crate_specs = Vec::new();
     for action in out.actions {
-        for output_id in action.output_ids {
-            let artifact = artifacts
-                .get(&output_id)
-                .expect("internal consistency error in bazel output");
-            let path = path_from_fragments(artifact.path_fragment_id, &path_fragments)?;
-            let path = execution_root.join(path);
-            if path.exists() {
-                output_files.push(path);
-            } else {
-                log::warn!("Skipping missing crate_spec file: {:?}", path);
-            }
-        }
+        crate_specs.push(
+            serde_json::from_str(&action.file_contents).with_context(|| {
+                format!(
+                    "Failed to deserialize crate_spec for target {}",
+                    targets
+                        .get(&action.target_id)
+                        .expect("internal consistency error in bazel output")
+                        .label,
+                )
+            })?,
+        );
     }
 
-    Ok(output_files)
-}
-
-fn path_from_fragments(
-    id: u32,
-    fragments: &BTreeMap<u32, &PathFragment>,
-) -> anyhow::Result<PathBuf> {
-    let path_fragment = fragments
-        .get(&id)
-        .expect("internal consistency error in bazel output");
-
-    let buf = match path_fragment.parent_id {
-        Some(parent_id) => path_from_fragments(parent_id, fragments)?
-            .join(PathBuf::from(&path_fragment.label.clone())),
-        None => PathBuf::from(&path_fragment.label.clone()),
-    };
-
-    Ok(buf)
+    Ok(crate_specs)
 }
 
 /// Read all crate specs, deduplicating crates with the same ID. This happens when

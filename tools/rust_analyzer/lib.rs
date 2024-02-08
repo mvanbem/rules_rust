@@ -53,7 +53,6 @@ pub fn write_rust_project(
     let crate_specs = aquery::get_crate_specs(
         bazel.as_ref(),
         workspace.as_ref(),
-        execution_root.as_ref(),
         additional_bazel_flags,
         targets,
         rules_rust_name.as_ref(),
