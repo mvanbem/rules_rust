@@ -583,7 +583,14 @@ def _rust_toolchain_impl(ctx):
     elif ctx.attr.target_json:
         # Ensure the data provided is valid json
         target_json_content = json.decode(ctx.attr.target_json)
-        target_json = ctx.actions.declare_file("{}.target.json".format(ctx.label.name))
+        if "llvm-target" in target_json_content:
+            # Name the file with the custom target specification's own declared target, if
+            # available. Rust embeds the filename in libraries, and a mismatch prevents linking even
+            # if the custom targets are otherwise identical.
+            target_json_path = "{}.json".format(target_json_content["llvm-target"])
+        else:
+            target_json_path = "{}.target.json".format(ctx.label.name)
+        target_json = ctx.actions.declare_file(target_json_path)
 
         ctx.actions.write(
             output = target_json,
